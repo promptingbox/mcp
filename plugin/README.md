@@ -7,14 +7,14 @@
 ### Option 1: From marketplace (recommended)
 
 ```bash
-/plugin install promptingbox
+/plugin install pbox
 ```
 
 ### Option 2: From GitHub
 
 ```bash
 /plugin marketplace add promptingbox/claude-plugins
-/plugin install promptingbox
+/plugin install pbox
 ```
 
 ## Setup
@@ -33,9 +33,9 @@ After installing, connect the plugin to your PromptingBox account:
 
 | Command | Description |
 |---|---|
-| `/promptingbox:save` | Save a prompt from the current conversation |
-| `/promptingbox:list` | List all your prompts grouped by folder |
-| `/promptingbox:search <query>` | Search your prompt library |
+| `/pbox:save` | Save a prompt from the current conversation |
+| `/pbox:list` | List all your prompts grouped by folder |
+| `/pbox:search <query>` | Search your prompt library |
 
 ## What's Included
 

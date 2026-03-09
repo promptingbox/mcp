@@ -3,7 +3,7 @@
   "description": "Official PromptingBox plugins for Claude Code",
   "plugins": [
     {
-      "name": "promptingbox",
+      "name": "pbox",
       "description": "Save, manage, and version AI prompts in PromptingBox",
       "path": "."
     }

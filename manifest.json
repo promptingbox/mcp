@@ -1,18 +1,40 @@
 {
+  "manifest_version": "0.4",
   "name": "promptingbox",
   "display_name": "PromptingBox",
+  "version": "0.4.1",
   "description": "Save, manage, and version your AI prompts. Store prompts from Claude conversations, organize with folders and tags, track versions, and retrieve them anytime.",
+  "author": {
+    "name": "PromptingBox",
+    "url": "https://www.promptingbox.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/promptingbox/mcp"
+  },
+  "homepage": "https://www.promptingbox.com",
+  "documentation": "https://www.promptingbox.com/docs/mcp",
   "icon": "icon.png",
   "server": {
     "type": "node",
-    "entry": "dist/index.js"
-  },
-  "config": {
-    "api_key": {
-      "type": "secret",
-      "label": "PromptingBox API Key",
-      "description": "Get your key at promptingbox.com/workspace/settings?view=mcp",
-      "required": true
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "PROMPTINGBOX_API_KEY": "${user_config.api_key}"
+      }
     }
-  }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "PromptingBox API Key",
+      "description": "Get your key at promptingbox.com/workspace/settings → MCP Integration",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "keywords": ["mcp", "prompts", "claude", "cursor", "promptingbox"],
+  "license": "MIT"
 }

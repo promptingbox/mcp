@@ -22,4 +22,4 @@ Save a prompt to the user's PromptingBox account.
 
 4. After saving, show the user the prompt URL so they can view it in PromptingBox.
 
-If the user provided arguments after the command (e.g., `/promptingbox:save my code review prompt`), use that as a hint for what to save.
+If the user provided arguments after the command (e.g., `/pbox:save my code review prompt`), use that as a hint for what to save.
