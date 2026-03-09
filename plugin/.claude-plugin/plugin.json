@@ -1,0 +1,14 @@
+{
+  "name": "promptingbox",
+  "description": "Save, manage, and version AI prompts in PromptingBox. Adds prompt management tools, slash commands, and smart prompt-saving skills.",
+  "version": "1.0.0",
+  "author": {
+    "name": "PromptingBox"
+  },
+  "homepage": "https://www.promptingbox.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/promptingbox/mcp"
+  },
+  "license": "MIT"
+}

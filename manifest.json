@@ -1,0 +1,18 @@
+{
+  "name": "promptingbox",
+  "display_name": "PromptingBox",
+  "description": "Save, manage, and version your AI prompts. Store prompts from Claude conversations, organize with folders and tags, track versions, and retrieve them anytime.",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry": "dist/index.js"
+  },
+  "config": {
+    "api_key": {
+      "type": "secret",
+      "label": "PromptingBox API Key",
+      "description": "Get your key at promptingbox.com/workspace/settings?view=mcp",
+      "required": true
+    }
+  }
+}

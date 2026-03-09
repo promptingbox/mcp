@@ -1,0 +1,11 @@
+{
+  "name": "promptingbox-marketplace",
+  "description": "Official PromptingBox plugins for Claude Code",
+  "plugins": [
+    {
+      "name": "promptingbox",
+      "description": "Save, manage, and version AI prompts in PromptingBox",
+      "path": "."
+    }
+  ]
+}

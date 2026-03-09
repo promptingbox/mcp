@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pbox": {
+      "command": "npx",
+      "args": ["-y", "@promptingbox/mcp"],
+      "env": {
+        "PROMPTINGBOX_API_KEY": ""
+      }
+    }
+  }
+}
