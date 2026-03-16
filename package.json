@@ -1,11 +1,16 @@
 {
   "name": "@promptingbox/mcp",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "MCP server for PromptingBox — save prompts from Claude, Cursor, and ChatGPT",
   "license": "MIT",
   "type": "module",
   "bin": {
     "promptingbox-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./tools": "./dist/tools.js",
+    "./api-client": "./dist/api-client.js"
   },
   "files": [
     "dist"
