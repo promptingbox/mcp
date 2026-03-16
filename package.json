@@ -1,7 +1,7 @@
 {
   "name": "@promptingbox/mcp",
-  "version": "0.5.0",
-  "description": "MCP server for PromptingBox — save prompts from Claude, Cursor, and ChatGPT",
+  "version": "0.6.0",
+  "description": "MCP server for PromptingBox — save, search, and discover prompts from Claude, Cursor, and ChatGPT with AI-powered semantic search",
   "license": "MIT",
   "type": "module",
   "bin": {

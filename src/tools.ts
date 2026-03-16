@@ -114,6 +114,45 @@ export function registerTools(
     }
   );
 
+  // ── find_relevant (semantic search) ─────────────────────────────────────────
+  server.tool(
+    'find_relevant',
+    'Find prompts in PromptingBox that are semantically relevant to the given context. Uses AI-powered semantic search — matches by meaning, not just keywords. Great for discovering prompts related to what the user is currently working on.',
+    {
+      context: z.string().describe('The context text to find relevant prompts for (e.g. what the user is working on, a question, a topic)'),
+      limit: z.number().int().min(1).max(20).optional().default(5).describe('Max number of results (default 5)'),
+      threshold: z.number().min(0).max(1).optional().default(0.3).describe('Minimum similarity score 0-1 (default 0.3)'),
+    },
+    async ({ context, limit, threshold }) => {
+      try {
+        const [result, suffix] = await Promise.all([
+          client.findRelevant({ context, limit, threshold }),
+          getSuffix(),
+        ]);
+
+        if (result.count === 0) {
+          return {
+            content: [{ type: 'text' as const, text: `No relevant prompts found for this context.\n\n${suffix}` }],
+          };
+        }
+
+        const lines = result.results.map((p) =>
+          `- **${p.title}** (${Math.round(p.similarity * 100)}% match)\n  ID: \`${p.id}\`${p.folderName ? ` | 📁 ${p.folderName}` : ''}`
+        );
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Found ${result.count} relevant prompt${result.count === 1 ? '' : 's'}:\n\n${lines.join('\n\n')}\n\nUse \`get_prompt\` with the ID to retrieve the full content.\n\n${suffix}`,
+          }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to find relevant prompts: ${message}`);
+      }
+    }
+  );
+
   // ── search_prompts ──────────────────────────────────────────────────────────
   server.tool(
     'search_prompts',

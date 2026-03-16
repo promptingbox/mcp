@@ -103,6 +103,23 @@ export interface SearchPromptsParams {
   favorites?: boolean;
 }
 
+export interface FindRelevantParams {
+  context: string;
+  limit?: number;
+  threshold?: number;
+}
+
+export interface FindRelevantResult {
+  results: Array<{
+    id: string;
+    title: string;
+    folderId: string;
+    folderName: string | null;
+    similarity: number;
+  }>;
+  count: number;
+}
+
 export class PromptingBoxClient {
   private apiKey: string;
   private baseUrl: string;
@@ -167,6 +184,13 @@ export class PromptingBoxClient {
 
   async getPrompt(id: string): Promise<PromptDetail> {
     return this.request<PromptDetail>(`/api/mcp/prompt/${id}`);
+  }
+
+  async findRelevant(params: FindRelevantParams): Promise<FindRelevantResult> {
+    return this.request<FindRelevantResult>('/api/mcp/prompt/find-relevant', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   }
 
   async searchPrompts(params: SearchPromptsParams): Promise<PromptListItem[]> {

@@ -18,7 +18,7 @@ if (!API_KEY) {
 
 const client = new PromptingBoxClient({ apiKey: API_KEY, baseUrl: BASE_URL });
 
-const CURRENT_VERSION = '0.5.0';
+const CURRENT_VERSION = '0.6.0';
 
 // Cache account info so we can surface it in every response
 let accountEmail: string | null = null;
@@ -85,10 +85,15 @@ async function getResponseSuffix(): Promise<string> {
   return suffix;
 }
 
-const server = new McpServer({
-  name: 'promptingbox',
-  version: CURRENT_VERSION,
-});
+const server = new McpServer(
+  {
+    name: 'promptingbox',
+    version: CURRENT_VERSION,
+  },
+  {
+    instructions: `PromptingBox is the user's personal prompt library. When the user asks a substantive question or works on a task, consider calling find_relevant with a short summary of their context to surface relevant saved prompts. If good matches are found (above 70% similarity), retrieve the full prompt with get_prompt and incorporate it into your answer. Skip this for trivial exchanges, greetings, or simple file operations.`,
+  }
+);
 
 const baseUrl = BASE_URL ?? 'https://www.promptingbox.com';
 
