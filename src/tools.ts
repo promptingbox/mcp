@@ -27,6 +27,12 @@ function errorResult(message: string) {
   return { content: [{ type: 'text' as const, text: message }], isError: true };
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
  * Register all PromptingBox tools on a given McpServer.
  *
@@ -103,6 +109,8 @@ export function registerTools(
               `Folder: ${prompt.folderName ?? '(none)'}\n` +
               `${tagList}\n` +
               `Favorite: ${prompt.isFavorite ? 'Yes' : 'No'}\n` +
+              `Published: ${prompt.isPublic ? `Yes — ${baseUrl}/prompt/@.../${prompt.slug}` : 'No'}\n` +
+              (prompt.publishedDescription ? `Description: ${prompt.publishedDescription}\n` : '') +
               `URL: ${baseUrl}/workspace/prompt/${prompt.id}\n\n` +
               `---\n\n${prompt.content}\n\n${suffix}`,
           }],
@@ -387,22 +395,35 @@ export function registerTools(
   // ── create_folder ───────────────────────────────────────────────────────────
   server.tool(
     'create_folder',
-    'Create a new folder in PromptingBox. If a folder with the same name exists, returns the existing one.',
+    'Create a new folder in PromptingBox. Supports one level of nesting — provide parentId or parentName to create a subfolder. If a folder with the same name exists at the same level, returns the existing one.',
     {
       name: z.string().describe('The folder name to create'),
+      parentId: z.string().optional().describe('ID of the parent folder to nest under (max 1 level deep)'),
+      parentName: z.string().optional().describe('Name of the parent folder to nest under (resolved to ID automatically)'),
     },
-    async ({ name }) => {
+    async ({ name, parentId, parentName }) => {
       try {
+        // Resolve parentName → parentId if needed
+        let resolvedParentId = parentId;
+        if (!resolvedParentId && parentName) {
+          const allFolders = await client.listFolders();
+          const lower = parentName.toLowerCase();
+          const match = allFolders.find((f) => f.name.toLowerCase() === lower);
+          if (!match) return errorResult(`Parent folder "${parentName}" not found.`);
+          resolvedParentId = match.id;
+        }
+
         const [result, suffix] = await Promise.all([
-          client.createFolder(name),
+          client.createFolder(name, resolvedParentId),
           getSuffix(),
         ]);
 
         const status = result.alreadyExisted ? 'already exists' : 'created';
+        const parentNote = resolvedParentId ? ' (subfolder)' : '';
         return {
           content: [{
             type: 'text' as const,
-            text: `Folder "${result.name}" ${status}.\nID: ${result.id}\n\n${suffix}`,
+            text: `Folder "${result.name}" ${status}${parentNote}.\nID: ${result.id}\n\n${suffix}`,
           }],
         };
       } catch (err) {
@@ -447,6 +468,262 @@ export function registerTools(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return errorResult(`Failed to delete folder: ${message}`);
+      }
+    }
+  );
+
+  // ── rename_folder ──────────────────────────────────────────────────────────
+  server.tool(
+    'rename_folder',
+    'Rename an existing folder in PromptingBox.',
+    {
+      folderId: z.string().optional().describe('The folder ID. Provide this or folderName.'),
+      folderName: z.string().optional().describe('The current folder name. Provide this or folderId.'),
+      newName: z.string().describe('The new name for the folder'),
+    },
+    async ({ folderId, folderName, newName }) => {
+      try {
+        let resolvedId = folderId;
+        if (!resolvedId) {
+          if (!folderName) return errorResult('Provide either folderId or folderName.');
+          const allFolders = await client.listFolders();
+          const lower = folderName.toLowerCase();
+          const match = allFolders.find((f) => f.name.toLowerCase() === lower);
+          if (!match) return errorResult(`No folder found matching "${folderName}".`);
+          resolvedId = match.id;
+        }
+
+        const [result, suffix] = await Promise.all([
+          client.updateFolder(resolvedId, { name: newName }),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{ type: 'text' as const, text: `Folder renamed to "${result.name}".\n\n${suffix}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to rename folder: ${message}`);
+      }
+    }
+  );
+
+  // ── move_folder ───────────────────────────────────────────────────────────
+  server.tool(
+    'move_folder',
+    'Move a folder under a parent folder (nest it) or to the top level. Supports one level of nesting only.',
+    {
+      folderId: z.string().optional().describe('The folder ID to move. Provide this or folderName.'),
+      folderName: z.string().optional().describe('The folder name to move. Provide this or folderId.'),
+      parentId: z.string().optional().describe('The parent folder ID to nest under. Provide this or parentName. Omit both to move to top level.'),
+      parentName: z.string().optional().describe('The parent folder name to nest under. Provide this or parentId. Omit both to move to top level.'),
+    },
+    async ({ folderId, folderName, parentId, parentName }) => {
+      try {
+        const allFolders = await client.listFolders();
+
+        // Resolve folder to move
+        let resolvedId = folderId;
+        if (!resolvedId) {
+          if (!folderName) return errorResult('Provide either folderId or folderName.');
+          const lower = folderName.toLowerCase();
+          const match = allFolders.find((f) => f.name.toLowerCase() === lower);
+          if (!match) return errorResult(`No folder found matching "${folderName}".`);
+          resolvedId = match.id;
+        }
+
+        // Resolve parent (null = top level)
+        let resolvedParentId: string | null = null;
+        if (parentId) {
+          resolvedParentId = parentId;
+        } else if (parentName) {
+          const lower = parentName.toLowerCase();
+          const match = allFolders.find((f) => f.name.toLowerCase() === lower);
+          if (!match) return errorResult(`Parent folder "${parentName}" not found.`);
+          resolvedParentId = match.id;
+        }
+
+        const [result, suffix] = await Promise.all([
+          client.updateFolder(resolvedId, { parentId: resolvedParentId }),
+          getSuffix(),
+        ]);
+
+        const location = resolvedParentId ? `under "${result.name}"` : 'to top level';
+        return {
+          content: [{ type: 'text' as const, text: `Folder "${result.name}" moved ${location}.\n\n${suffix}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to move folder: ${message}`);
+      }
+    }
+  );
+
+  // ── publish_prompt ────────────────────────────────────────────────────────
+  server.tool(
+    'publish_prompt',
+    'Publish a prompt to your public profile on PromptingBox. Makes it visible at /prompt/@username/slug. Requires a username to be set.',
+    {
+      promptId: z.string().optional().describe('The prompt ID. Provide this or promptTitle.'),
+      promptTitle: z.string().optional().describe('The prompt title to search for. Provide this or promptId.'),
+      description: z.string().optional().describe('A short public description for the published prompt (max 500 chars)'),
+    },
+    async ({ promptId, promptTitle, description }) => {
+      try {
+        const resolved = await resolvePromptId(client, promptId, promptTitle);
+        if ('error' in resolved) return errorResult(resolved.error);
+
+        const [result, suffix] = await Promise.all([
+          client.publishPrompt(resolved.id, description),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Prompt published!\n\nURL: ${baseUrl}${result.publishedUrl}\nSlug: ${result.slug}\n\n${suffix}`,
+          }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to publish prompt: ${message}`);
+      }
+    }
+  );
+
+  // ── unpublish_prompt ──────────────────────────────────────────────────────
+  server.tool(
+    'unpublish_prompt',
+    'Unpublish a prompt, removing it from your public profile. The prompt is not deleted — it becomes private again.',
+    {
+      promptId: z.string().optional().describe('The prompt ID. Provide this or promptTitle.'),
+      promptTitle: z.string().optional().describe('The prompt title to search for. Provide this or promptId.'),
+    },
+    async ({ promptId, promptTitle }) => {
+      try {
+        const resolved = await resolvePromptId(client, promptId, promptTitle);
+        if ('error' in resolved) return errorResult(resolved.error);
+
+        const [, suffix] = await Promise.all([
+          client.unpublishPrompt(resolved.id),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{ type: 'text' as const, text: `Prompt unpublished. It is now private.\n\n${suffix}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to unpublish prompt: ${message}`);
+      }
+    }
+  );
+
+  // ── list_context_sources ──────────────────────────────────────────────────
+  server.tool(
+    'list_context_sources',
+    'List all context sources attached to a prompt. Context sources are files or text that provide additional context when using the prompt.',
+    {
+      promptId: z.string().optional().describe('The prompt ID. Provide this or promptTitle.'),
+      promptTitle: z.string().optional().describe('The prompt title to search for. Provide this or promptId.'),
+    },
+    async ({ promptId, promptTitle }) => {
+      try {
+        const resolved = await resolvePromptId(client, promptId, promptTitle);
+        if ('error' in resolved) return errorResult(resolved.error);
+
+        const [sources, suffix] = await Promise.all([
+          client.listContextSources(resolved.id),
+          getSuffix(),
+        ]);
+
+        if (sources.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: `No context sources attached to this prompt.\n\n${suffix}` }],
+          };
+        }
+
+        const lines = sources.map((s) =>
+          `- **${s.source_name}** (${formatBytes(s.extracted_size)})${s.is_enabled ? '' : ' [disabled]'}\n  ID: \`${s.id}\``
+        );
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Context sources (${sources.length}):\n\n${lines.join('\n')}\n\n${suffix}`,
+          }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to list context sources: ${message}`);
+      }
+    }
+  );
+
+  // ── add_context_source ────────────────────────────────────────────────────
+  server.tool(
+    'add_context_source',
+    'Attach a context source to a prompt. Send the extracted text content directly — useful for adding file contents, documentation, or reference material that should accompany the prompt.',
+    {
+      promptId: z.string().optional().describe('The prompt ID. Provide this or promptTitle.'),
+      promptTitle: z.string().optional().describe('The prompt title to search for. Provide this or promptId.'),
+      sourceName: z.string().describe('Name of the source (e.g. filename like "README.md")'),
+      extractedText: z.string().describe('The text content to attach'),
+      sourceMimeType: z.string().optional().describe('MIME type (e.g. "text/plain", "text/markdown")'),
+    },
+    async ({ promptId, promptTitle, sourceName, extractedText, sourceMimeType }) => {
+      try {
+        const resolved = await resolvePromptId(client, promptId, promptTitle);
+        if ('error' in resolved) return errorResult(resolved.error);
+
+        const [result, suffix] = await Promise.all([
+          client.addContextSource(resolved.id, {
+            sourceName,
+            extractedText,
+            sourceMimeType,
+            sourceSize: new TextEncoder().encode(extractedText).length,
+          }),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Context source "${result.source_name}" added (${formatBytes(result.extracted_size)}).\n\n${suffix}`,
+          }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to add context source: ${message}`);
+      }
+    }
+  );
+
+  // ── remove_context_source ─────────────────────────────────────────────────
+  server.tool(
+    'remove_context_source',
+    'Remove a context source from a prompt. Use list_context_sources first to get the context source ID.',
+    {
+      promptId: z.string().optional().describe('The prompt ID. Provide this or promptTitle.'),
+      promptTitle: z.string().optional().describe('The prompt title to search for. Provide this or promptId.'),
+      contextId: z.string().describe('The context source ID to remove (from list_context_sources)'),
+    },
+    async ({ promptId, promptTitle, contextId }) => {
+      try {
+        const resolved = await resolvePromptId(client, promptId, promptTitle);
+        if ('error' in resolved) return errorResult(resolved.error);
+
+        const [, suffix] = await Promise.all([
+          client.removeContextSource(resolved.id, contextId),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{ type: 'text' as const, text: `Context source removed.\n\n${suffix}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to remove context source: ${message}`);
       }
     }
   );
@@ -563,6 +840,37 @@ export function registerTools(
     }
   );
 
+  // ── get_template ────────────────────────────────────────────────────────────
+  server.tool(
+    'get_template',
+    'Get the full content of a public template from the PromptingBox library. Use this to preview a template before saving it with use_template.',
+    {
+      templateId: z.string().describe('The template ID (from search_templates)'),
+    },
+    async ({ templateId }) => {
+      try {
+        const [template, suffix] = await Promise.all([
+          client.getTemplate(templateId),
+          getSuffix(),
+        ]);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `**${template.title}**${template.category ? ` (${template.category})` : ''}\n` +
+              (template.description ? `${template.description}\n\n` : '\n') +
+              `---\n${template.content}\n---\n\n` +
+              `Used ${template.usageCount} times\n` +
+              `Use \`use_template\` with ID \`${template.id}\` to save to your collection.\n\n${suffix}`,
+          }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorResult(`Failed to get template: ${message}`);
+      }
+    }
+  );
+
   // ── use_template ────────────────────────────────────────────────────────────
   server.tool(
     'use_template',
@@ -614,19 +922,40 @@ export function registerTools(
   // ── list_folders ─────────────────────────────────────────────────────────────
   server.tool(
     'list_folders',
-    'List all folders in the user\'s PromptingBox account. Useful to know where to save a prompt.',
+    'List all folders in the user\'s PromptingBox account. Shows nested folder structure. Useful to know where to save a prompt.',
     {},
     async () => {
       try {
-        const [folders, suffix] = await Promise.all([client.listFolders(), getSuffix()]);
-        if (folders.length === 0) {
+        const [allFolders, suffix] = await Promise.all([client.listFolders(), getSuffix()]);
+        if (allFolders.length === 0) {
           return {
             content: [{ type: 'text' as const, text: `No folders found. You can specify a folder name when saving and it will be created automatically.\n\n${suffix}` }],
           };
         }
-        const list = folders.map((f) => `- ${f.name} (id: \`${f.id}\`)`).join('\n');
+
+        // Build nested display: top-level first, then children indented
+        const topLevel = allFolders.filter((f) => !f.parentId);
+        const childrenByParent = new Map<string, typeof allFolders>();
+        for (const f of allFolders) {
+          if (f.parentId) {
+            if (!childrenByParent.has(f.parentId)) childrenByParent.set(f.parentId, []);
+            childrenByParent.get(f.parentId)!.push(f);
+          }
+        }
+
+        const lines: string[] = [];
+        for (const f of topLevel) {
+          lines.push(`- ${f.name} (id: \`${f.id}\`)`);
+          const children = childrenByParent.get(f.id);
+          if (children) {
+            for (const child of children) {
+              lines.push(`  - ${child.name} (id: \`${child.id}\`)`);
+            }
+          }
+        }
+
         return {
-          content: [{ type: 'text' as const, text: `Folders in PromptingBox:\n${list}\n\n${suffix}` }],
+          content: [{ type: 'text' as const, text: `Folders in PromptingBox:\n${lines.join('\n')}\n\n${suffix}` }],
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

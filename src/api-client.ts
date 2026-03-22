@@ -30,6 +30,7 @@ export interface Folder {
   id: string;
   name: string;
   order: number;
+  parentId?: string | null;
   isDefault?: boolean;
 }
 
@@ -53,6 +54,10 @@ export interface PromptDetail {
   folderId: string | null;
   folderName: string | null;
   isFavorite: boolean;
+  isPublic: boolean;
+  slug: string | null;
+  publishedDescription: string | null;
+  publishedAt: string | null;
   tags: Tag[];
   createdAt: string;
   updatedAt: string;
@@ -251,10 +256,19 @@ export class PromptingBoxClient {
 
   // ── New: Folder operations ───────────────────────────────────────────────
 
-  async createFolder(name: string): Promise<{ id: string; name: string; alreadyExisted: boolean }> {
+  async createFolder(name: string, parentId?: string): Promise<{ id: string; name: string; alreadyExisted: boolean }> {
+    const payload: Record<string, string> = { name };
+    if (parentId) payload.parentId = parentId;
     return this.request('/api/mcp/folder', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateFolder(id: string, updates: { name?: string; parentId?: string | null }): Promise<{ id: string; name: string; parentId: string | null }> {
+    return this.request(`/api/mcp/folder/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
     });
   }
 
@@ -302,4 +316,65 @@ export class PromptingBoxClient {
       method: 'POST',
     });
   }
+
+  // ── Publish operations ────────────────────────────────────────────────────
+
+  async publishPrompt(promptId: string, description?: string): Promise<{
+    success: boolean;
+    slug: string;
+    publishedAt: string;
+    publishedDescription: string | null;
+    publishedUrl: string;
+  }> {
+    return this.request(`/api/mcp/prompt/${promptId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(description ? { publishedDescription: description } : {}),
+    });
+  }
+
+  async unpublishPrompt(promptId: string): Promise<{ success: boolean }> {
+    return this.request(`/api/mcp/prompt/${promptId}/publish`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ── Context source operations ─────────────────────────────────────────────
+
+  async listContextSources(promptId: string): Promise<ContextSource[]> {
+    return this.request<ContextSource[]>(`/api/mcp/prompt/${promptId}/context`);
+  }
+
+  async addContextSource(promptId: string, params: AddContextParams): Promise<ContextSource> {
+    return this.request<ContextSource>(`/api/mcp/prompt/${promptId}/context`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async removeContextSource(promptId: string, contextId: string): Promise<{ success: boolean }> {
+    return this.request(`/api/mcp/prompt/${promptId}/context/${contextId}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+// ── Additional types ──────────────────────────────────────────────────────────
+
+export interface ContextSource {
+  id: string;
+  source_name: string;
+  source_type: string;
+  source_mime_type: string | null;
+  source_size: number | null;
+  extracted_size: number;
+  is_enabled: boolean;
+  created_at: string;
+}
+
+export interface AddContextParams {
+  sourceName: string;
+  sourceType?: 'file';
+  sourceMimeType?: string;
+  sourceSize?: number;
+  extractedText: string;
 }
